@@ -1,0 +1,50 @@
+// 定义一个细胞结构体装载DEM中的元素
+struct Cell {
+    int row, col;
+    float dem;
+    bool operator<(const Cell& rhs) const {
+        return dem > rhs.dem;  // 优先级队列需要最小堆
+    }
+};
+
+std::vector<std::vector<float>> Fill(const std::vector<std::vector<float>>& DEM) {
+    int rows = DEM.size();
+    int cols = DEM[0].size();
+
+    std::priority_queue<Cell> OPEN;
+    std::vector<std::vector<bool>> CLOSED(rows, std::vector<bool>(cols, false));
+    std::vector<std::vector<float>> Spill = DEM;
+
+    // 用边界细胞初始化优先级队列
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            if (i == 0 || j == 0 || i == rows - 1 || j == cols - 1) {
+                if (DEM[i][j] != -9999) { // Only add the cell to the queue if its value is not -9999
+                    OPEN.push({ i, j, Spill[i][j] });
+                }
+            }
+        }
+    }
+
+    // 定义8个方向的偏移量
+    std::vector<std::pair<int, int>> directions = { {-1, 0}, {-1, 1}, {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1} };
+
+    while (!OPEN.empty()) {
+        Cell c = OPEN.top();
+        OPEN.pop();
+        CLOSED[c.row][c.col] = true;
+
+        for (const auto& dir : directions) {
+            int newRow = c.row + dir.first;
+            int newCol = c.col + dir.second;
+
+            if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols && !CLOSED[newRow][newCol]) {
+                Spill[newRow][newCol] = std::max(DEM[newRow][newCol], Spill[c.row][c.col]);
+                OPEN.push({ newRow, newCol, Spill[newRow][newCol] });
+            }
+        }
+    }
+
+    // 返回Spill矩阵
+    return Spill;
+}
