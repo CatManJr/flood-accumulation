@@ -3,7 +3,8 @@
 ## Course Work for 2023 Fall GIS System from the Ground Up
 ## English
 ### Overview
-This repository contains the course work for a GIS system project, focusing on flood accumulation calculations. It has been developed using C++20 standards and is designed to be compiled and run in Visual Studio 2022 Community X64 debug mode.
+This repository contains the course work for a GIS system project, focusing on flood accumulation calculations. It has been developed using C++20 standards and is designed to be compiled and run in Visual Studio 2022 Community X64 debug mode.  
+It can process a 696-line, 493-column 32-bit DEM dataset on a single thread on a laptop Intel i7-13700HX 2100MHz chip with no more than 6s, 23MB memory.
 
 ### Getting Started
 
@@ -15,8 +16,8 @@ This repository contains the course work for a GIS system project, focusing on f
    - The `presentation.pdf` document provides a detailed explanation of the algorithms and logic implemented in the code.
 
 3. **Data Sets**
-   - The `dataset` folder contains two example DEM (Digital Elevation Model) data sets, each with a magnitude of 3 * 1e6.
-   - The `result` folder contains the data results after running the solution.
+   - The `dataset` folder contains two example DEM (Digital Elevation Model) data sets, each with a scale of 1e6.
+   - The `result` folder contains the data results after running the solution. You could extract the streams and visualize them more beautifully using ArcGIS.
 
 4. **Software Requirements**
    - **GDAL 3.X Library**: To run this solution, you need to compile the GDAL 3.X library locally.
@@ -25,10 +26,11 @@ This repository contains the course work for a GIS system project, focusing on f
 
 5. **Additional Materiel**
    - The `Fill.txt` file contains a small component `std::vector<vector<float>> Fill`, which implements a depression filling method using a priority queue with a time complexity of O(n).
-   - Note: This method has a memory management issue but is considered elegant by the author and is therefore retained.
+   - Note: This method has a memory management issue and has not been merged into the final solution. But I considered it elegant and, therefore, it was finally retained.
 ## 中文
 ### 概述
-此仓库包含了一个专注于洪水累积量计算的地理信息系统项目作业。它是使用C++20标准开发的，并设计为在Visual Studio 2022 Community X64调试模式下编译和运行。
+此仓库是一个专注于高速洪水累积量计算的地理信息系统底层开发作业。它是使用C++20标准开发的，并在Visual Studio 2022 Community X64 Debug模式下编译和运行通过。他在笔记本Intel i7-13700HX 2100MHz芯片上单线程处理一个696行，
+493列，32 Bit的DEM数据只需要不超过6s，23MB内存。
 
 ### 开始使用
 
@@ -40,8 +42,8 @@ This repository contains the course work for a GIS system project, focusing on f
    - `presentation.pdf` 文档提供了代码中实现的算法和逻辑的详细说明。
 
 3. **数据集**
-   - `dataset` 文件夹包含了两个示例的DEM（数字高程模型）数据集，每个数据集的大小为3 * 1e6。
-   - `result` 文件夹包含了运行解决方案后的数据结果。
+   - `dataset` 文件夹包含了两个示例的DEM（数字高程模型）数据集，数据集的尺寸大约为1e6个像素。
+   - `Test result` 文件夹包含了运行解决方案后的数据结果。你可以在ArcGIS中进一步提取流线和可视化。
 
 4. **软件要求**
    - **GDAL 3.X库**：要运行此解决方案，您需要在本地编译GDAL 3.X库。
@@ -50,7 +52,7 @@ This repository contains the course work for a GIS system project, focusing on f
 
 5. **额外材料**
    - `Fill.txt` 文件包含了一个函数 `std::vector<vector<float>> Fill`，它使用优先队列实现了一种填洼方法，时间复杂度为O(n)。
-   - 注意：该方法存在内存管理问题，但作者认为这种方法非常优雅，因此保留。
+   - 注意：该方法存在内存管理问题于是没有在项目中部署，但我认为这种方法非常优雅，因此保留了txt版本。
 
 ### References
 
