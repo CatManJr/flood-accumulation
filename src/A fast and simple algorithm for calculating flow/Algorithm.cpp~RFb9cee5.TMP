@@ -1,0 +1,463 @@
+#include <iostream>
+#include <gdal.h>
+#include <gdal_priv.h>
+//#include <opencv2/opencv.hpp>
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+#include <set>
+#include <sstream>
+#include <ctime>
+#include <cmath>
+using namespace std;
+//#define DEM_SIZE 100		//size要小于等于dem数据的长和宽，可以采用vector容器存储数据，复用性更强
+const int NODATA = -9999;
+std::vector<std::vector<float>> getMatrix(string path)
+{
+    // 使用GDAL打开TIFF文件
+    GDALAllRegister();//注册所有的驱动
+    CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");  //设置支持中文路径和文件名
+
+    //1、加载tif数据
+    string file_path_name = path;
+
+    GDALDataset* poDataset = (GDALDataset*)GDALOpen(file_path_name.c_str(), GA_ReadOnly);//GA_Update和GA_ReadOnly两种模式
+    if (poDataset == NULL)
+    {
+        cout << "获取栅格矩阵失败！" << endl;
+        return {};
+    }
+
+    // 获取栅格的行数和列数
+    int nRows = poDataset->GetRasterYSize();
+    int nCols = poDataset->GetRasterXSize();
+
+    // 创建一个二维向量来存储DEM的值
+    std::vector<std::vector<float>> DEM_init(nRows, std::vector<float>(nCols));
+
+    // 获取第一个波段
+    GDALRasterBand* poBand = poDataset->GetRasterBand(1);
+
+    // 读取数据
+    for (int i = 0; i < nRows; ++i) {
+        poBand->RasterIO(GF_Read, 0, i, nCols, 1, &DEM_init[i][0], nCols, 1, GDT_Float32, 0, 0);
+    }
+
+    // 获取NoData值
+    int success;
+    double NoDataValue = poBand->GetNoDataValue(&success);
+    if (success)
+        cout << "NoData值为：" << NoDataValue << endl;
+    {
+        // 如果存在NoData值，遍历数组并处理NoData值
+        for (int i = 0; i < nRows; ++i) {
+            for (int j = 0; j < nCols; ++j) {
+                if (DEM_init[i][j] == NoDataValue) {
+                    // 将NoData值替换为-9999
+                    DEM_init[i][j] = -9999;
+                }
+            }
+        }
+    }
+
+    // 在这里，DEM_init包含DEM的初始值矩阵
+
+    // 关闭数据集
+    GDALClose(poDataset);
+    cout << "获取栅格矩阵成功！" << endl;
+
+    return DEM_init;
+}
+
+// 定义一个细胞结构体装载DEM中的元素
+struct Cell {
+    int row, col;
+    float dem;
+    bool operator<(const Cell& rhs) const {
+        return dem > rhs.dem;  // 优先级队列默认为最大堆，我们需要最小堆
+    }
+};
+
+//std::vector<std::vector<float>> Fill(const std::vector<std::vector<float>>& DEM) {
+//    int rows = DEM.size();
+//    int cols = DEM[0].size();
+//
+//    std::vector<std::vector<float>> Fill(rows, std::vector<float>(cols, 100000));
+//    std::vector<std::pair<int, int>> directions = { {-1, 0}, {-1, 1}, {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1} };
+//
+//    // Initialize the Fill matrix
+//    for (int i = 0; i < rows; ++i) {
+//        for (int j = 0; j < cols; ++j) {
+//            if (i == 0 || j == 0 || i == rows - 1 || j == cols - 1 || DEM[i][j] == -9999) {
+//                Fill[i][j] = DEM[i][j];
+//            }
+//        }
+//    }
+//
+//    bool Fill_done = false;
+//    while (!Fill_done) {
+//        Fill_done = true;
+//        for (int i = 0; i < rows; ++i) {
+//            for (int j = 0; j < cols; ++j) {
+//                if (Fill[i][j] > DEM[i][j]) {
+//                    for (const auto& dir : directions) {
+//                        int newRow = i + dir.first;
+//                        int newCol = j + dir.second;
+//
+//                        if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols && DEM[newRow][newCol] != -9999) {
+//                            if (DEM[i][j] > Fill[newRow][newCol] + 0.1) {
+//                                Fill[i][j] = DEM[i][j];
+//                                Fill_done = false;
+//                                break;
+//                            }
+//                            if (Fill[i][j] > Fill[newRow][newCol] + 0.1) {
+//                                Fill[i][j] = Fill[newRow][newCol] + 0.1;
+//                                Fill_done = false;
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
+//
+//    // Return the Fill matrix
+//    return Fill;
+//}
+
+std::vector<std::vector<float>> Fill(const std::vector<std::vector<float>>& DEM) {
+    int rows = DEM.size();
+    int cols = DEM[0].size();
+
+    std::priority_queue<Cell> OPEN;
+    std::vector<std::vector<bool>> CLOSED(rows, std::vector<bool>(cols, false));
+    std::vector<std::vector<float>> Spill = DEM;
+
+    // Initialize the priority queue with boundary cells
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            if (i == 0 || j == 0 || i == rows - 1 || j == cols - 1) {
+                if (DEM[i][j] != -9999) { // Only add the cell to the queue if its value is not -9999
+                    OPEN.push({ i, j, Spill[i][j] });
+                }
+            }
+        }
+    }
+
+    // Define the directions for the neighbors
+    std::vector<std::pair<int, int>> directions = { {-1, 0}, {-1, 1}, {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1} };
+
+    while (!OPEN.empty()) {
+        Cell c = OPEN.top();
+        OPEN.pop();
+        CLOSED[c.row][c.col] = true;
+
+        for (const auto& dir : directions) {
+            int newRow = c.row + dir.first;
+            int newCol = c.col + dir.second;
+
+            if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols && !CLOSED[newRow][newCol]) {
+                Spill[newRow][newCol] = std::max(DEM[newRow][newCol], Spill[c.row][c.col]);
+                OPEN.push({ newRow, newCol, Spill[newRow][newCol] });
+            }
+        }
+    }
+
+    // Return the Spill matrix
+    return Spill;
+}
+
+std::vector<std::vector<int>> d8_Algorithm(const std::vector<std::vector<float>>& fill) {
+    int rows = fill.size();
+    int cols = fill[0].size();
+
+    std::vector<std::vector<int>> flowDirection(rows, std::vector<int>(cols, 0));
+
+    // 定义方向值
+    std::vector<std::vector<int>> dir = { {32, 64, 128}, {16, 0, 1}, {8, 4, 2} };
+
+    for (int i = 1; i < rows; ++i) {
+        for (int j = 1; j < cols; ++j) {
+            float z = fill[i][j];
+            if (z == -9999) {  // 栅格值为-9999的流向赋为0
+                flowDirection[i][j] = 0;
+                continue;
+            }
+
+            float min_z = z;
+            int min_dir = 0;
+
+            // 检查所有8个邻居
+            for (int di = -1; di <= 1; ++di) {
+                for (int dj = -1; dj <= 1; ++dj) {
+                    int ni = i + di;
+                    int nj = j + dj;
+
+                    // 跳过中心单元格和没有邻居的方向
+                    if ((di == 0 && dj == 0) || ni < 0 || ni >= rows || nj < 0 || nj >= cols) continue;
+
+                    float nz = fill[ni][nj];
+                    if (nz == -9999) continue;  // 忽略值为-9999的栅格
+
+                    if (nz < min_z) {
+                        min_z = nz;
+                        min_dir = dir[di + 1][dj + 1];
+                    }
+                    //else if (nz == z && flowDirection[ni][nj] != 0) {
+                    //    // 如果邻居的DEM值与当前单元格相同且邻居的流向不为0，则流向与邻居相同
+                    //    min_dir = flowDirection[ni][nj];
+                    //}
+                }
+            }
+
+            flowDirection[i][j] = min_dir;
+        }
+    }
+
+    return flowDirection;
+}
+
+Cell NextCell(Cell c, vector<vector<int>>& FlowDir) {
+    // 定义8个方向的偏移量
+    std::vector<int> dx = { -1, -1, 0, 1, 1, 1, 0, -1 };
+    std::vector<int> dy = { 0, 1, 1, 1, 0, -1, -1, -1 };
+
+    // 定义8个方向的值
+    std::vector<int> d8 = { 16, 32, 64, 128, 1, 2, 4, 8 };
+
+    // 检查每个方向
+    for (int k = 0; k < 8; ++k) {
+        // 如果 c 单元格的流向是这个方向
+        if (FlowDir[c.row][c.col] == d8[k]) {
+            // 计算下游单元格的位置
+            int newRow = c.row + dx[k];
+            int newCol = c.col + dy[k];
+
+            // 检查下游单元格是否在 DEM 的范围内
+            if (newRow >= 0 && newRow < FlowDir.size() && newCol >= 0 && newCol < FlowDir[0].size() && FlowDir[newRow][newCol] != -9999) {
+                // 返回下游单元格，溢出量为 FlowDir 中相应位置的值
+                return { newRow, newCol, static_cast<float>(FlowDir[newRow][newCol]) };
+            }
+            else {
+                return { -1, -1, -1 };  // 假设行和列为-1表示没有下游单元格
+            }
+        }
+    }
+
+    // 如果 c 单元格的流向不是任何一个方向，返回一个特殊的 Cell 对象用于判别
+    return { -1, -1, -1 };  // 假设行和列为-1表示没有下游单元格
+}
+
+vector<vector<int>> initialize_NIDP(vector<vector<int>>& FlowDir) {
+    // 获取 FlowDir 的行数和列数
+    int rows = FlowDir.size();
+    int cols = FlowDir[0].size();
+
+    // 创建一个新的 NIDP 矩阵，初始化为零
+    vector<vector<int>> NIDP(rows, vector<int>(cols, 0));
+
+    // 定义8个方向的偏移量
+    std::vector<int> dx = { -1, -1, 0, 1, 1, 1, 0, -1 };
+    std::vector<int> dy = { 0, 1, 1, 1, 0, -1, -1, -1 };
+    std::vector<int> d8 = { 16, 32, 64, 128, 1, 2, 4, 8 };
+
+    // 遍历每一个单元格;
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            // 检查每个方向上的邻居
+            for (int k = 0; k < 8; ++k) {
+                int ni = i + dx[k];
+                int nj = j + dy[k];
+
+                // 检查邻居是否在 DEM 的范围内
+                if (ni >= 0 && ni < rows && nj >= 0 && nj < cols) {
+                    // 如果邻居的流向指向当前单元格，增加 NIDP 值
+                    if (FlowDir[ni][nj] == d8[k]) {
+                        NIDP[i][j]++;
+                    }
+                }
+            }
+        }
+    }
+
+    return NIDP;
+}
+
+vector<vector<int>> Accumulate(vector<vector<int>>& FlowDir) {
+    // 获取 FlowDir 的行数和列数
+    int rows = FlowDir.size();
+    int cols = FlowDir[0].size();
+
+    // 创建一个新的二维数组 FlowAccu，所有元素初始化为1
+    vector<vector<int>> FlowAccu(rows, vector<int>(cols, 1));
+
+    // 调用 initialize_NIDP
+    vector<vector<int>> NIDP = initialize_NIDP(FlowDir);
+    for (int i = 0; i < NIDP.size(); ++i) {
+        for (int j = 0; j < NIDP[i].size(); ++j) {
+            std::cout << NIDP[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << "NIDP初始化完成" << std::endl;
+    // 遍历每一个单元格
+    for (int row = 0; row < FlowDir.size(); ++row) {
+        for (int col = 0; col < FlowDir[0].size(); ++col) {
+            Cell c = { row, col , FlowDir[row][col] };
+            if (NIDP[row][col] != 0) continue;
+            Cell n = c;
+            int nAccu = 0;
+            do {
+                FlowAccu[n.row][n.col] += nAccu;
+                nAccu = FlowAccu[n.row][n.col];
+                if (NIDP[n.row][n.col] >= 2) {
+                    NIDP[n.row][n.col]--;
+                    break;
+                }
+                n = NextCell(n, FlowDir);
+            } while (n.row != -1 && n.row < rows
+                && n.col != -1 && n.col < cols);
+        }
+    }
+    return FlowAccu;
+}
+
+
+void writetif(const std::vector<std::vector<int>>& FlowAccu)
+{
+    // 使用GDAL写入TIFF文件
+    GDALAllRegister();//注册所有的驱动
+    CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");  //设置支持中文路径和文件名
+    //创建驱动
+    GDALDriver* poDriver = GetGDALDriverManager()->GetDriverByName("GTiff");
+    if (poDriver == NULL)
+    {
+        cout << "获取驱动失败！" << endl;
+        return;
+    }
+    //创建数据集
+    string output_file  = "C:\\Users\\23962\\Desktop\\TEST\\result\\DEM_3.tif";
+    /*cout << "请输入流量数据的输出路径：";
+    cin >> output_file;*/
+    GDALDataset* poDataset = poDriver->Create(output_file.c_str(), FlowAccu[0].size(), FlowAccu.size(), 1, GDT_Float32, NULL);
+    if (poDataset == NULL)
+    {
+        cout << "创建数据集失败！" << endl;
+        return;
+    }
+    //写入数据
+    int nCols = poDataset->GetRasterXSize();
+    int nRows = poDataset->GetRasterYSize();
+    float* pData = new float[nCols * nRows];
+    for (int i = 0; i < nRows; ++i) {
+        for (int j = 0; j < nCols; ++j)
+        {
+            pData[i * nCols + j] = FlowAccu[i][j];
+        }
+    }
+    //设置数据集的波段
+    GDALRasterBand* poBand = poDataset->GetRasterBand(1);
+    poBand->RasterIO(GF_Write, 0, 0, nCols, nRows, pData, nCols, nRows, GDT_Float32, 0, 0);
+    //释放内存
+    delete[]pData;
+    pData = NULL;
+    //关闭数据集
+    GDALClose((GDALDatasetH)poDataset);
+    return;
+}
+
+void printProgress(int progress, int total) 
+{
+    int barWidth = 70;
+
+    std::cout << "[";
+    int pos = barWidth * progress / total;
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0 / total) << " %\r"<< endl;
+    std::cout.flush();
+}
+
+void main()
+{
+    // 读取DEM数据
+    string file_path = "C:\\Users\\23962\\Desktop\\TEST\\test\\DEM_Clip1.tif";
+    //*cout << "请输入DEM数据的路径：";
+    //cin >> file_path;*/
+    std::vector<std::vector<float>> DEM = getMatrix(file_path);
+    //std::vector<std::vector<float>> DEM = {
+    //                                        {211, 222, 233, 224, 215, 211, 217, 218, 209, 170, 217},
+    //            							{163, 143, 224, 215, 216, 187, 118, 189, 190, 140, 202},
+    //            							{214, 194, 135, 206, 217, 188, 209, 196, 181, -9999, 217},
+    //            							{244, 185, 176, 125, 208, 189, 210, 211, 192, 183, 202},
+    //            							{215, 206, -9999, 178, 123, 190, 194, 212, 203, 154, 217},
+    //            							{216, 235, 208, 169, 180, 211, 112, 213, 184, 155, 217},
+    //            							{-9999, 208, 182, 177, 211, 202, 103, 164, 155, 166, 184},
+    //            							{218, 209, 240, 211, 162, 153, 194, 102, 166, 177, 217},
+    //            							{179, 193, 211, 162, -9999, 141, 135, 186, 97, 188, 184},
+    //            							{180, 211, 212, 153, -9999, 125, 166, 127, 168, 79, 217} };
+    //std::vector<std::vector<float>> DEM = { 
+    //    { 1701, 1699, 1701, 1704, 1704, 1707, 1711, 1714, 1717, 1713, 1705, 1697, 1682, 1666, 1668, 1681, 1699, 1719},
+    //    { 1697, 1697, 1699, 1702, 1701, 1703, 1707, 1709, 1710, 1705, 1695, 1680, 1668, 1660, 1662, 1674, 1697, 1719 },
+    //    { 1694, 1694, 1697, 1699, 1699, 1701, 1705, 1706, 1705, 1700, 1682, 1668, 1660, 1656, 1658, 1669, 1693, 1713 },
+    //    { 1689, 1691, 1695, 1697, 1698, 1701, 1704, 1704, 1701, 1693, 1676, 1659, 1653, 1652, 1660, 1672, 1692, 1707 },
+    //    { 1687, 1689, 1691, 1694, 1696, 1699, 1700, 1698, 1694, 1685, 1666, 1651, 1647, 1648, 1660, 1671, 1684, 1695 },
+    //    { 1687, 1689, 1691, 1694, 1696, 1699, 1700, 1698, 1694, 1671, 1652, 1640, 1639, 1647, 1656, 1665, 1675, 1685 },
+    //    { 1685, 1686, 1687, 1690, 1692, 1696, 1695, 1693, 1690, 1671, 1652, 1640, 1639, 1647, 1656, 1665, 1675, 1685 },
+    //    { 1684, 1684, 1685, 1689, 1691, 1694, 1693, 1692, 1679, 1653, 1637, 1631, 1636, 1645, 1652, 1661, 1670, 1679 },
+    //    { 1682, 1683, 1685, 1687, 1688, 1690, 1689, 1682, 1661, 1633, 1628, 1628, 1632, 1641, 1649, 1659, 1669, 1671 },
+    //    { 1678, 1679, 1682, 1685, 1685, 1684, 1683, 1677, 1657, 1628, 1625, 1626, 1629, 1638, 1647, 1658, 1663, 1665 },
+    //    { 1676, 1676, 1677, 1681, 1682, 1682, 1681, 1673, 1658, 1630, 1626, 1624, 1628, 1636, 1648, 1657, 1659, 1655 },
+    //    { 1674, 1672, 1673, 1677, 1679, 1678, 1672, 1660, 1645, 1630, 1623, 1622, 1625, 1635, 1647, 1654, 1653, 1647 },
+    //    { 1670, 1670, 1669, 1672, 1670, 1665, 1654, 1641, 1629, 1622, 1617, 1619, 1625, 1632, 1644, 1646, 1642, 1636 },
+    //    { 1668, 1669, 1668, 1665, 1658, 1650, 1636, 1625, 1617, 1615, 1612, 1616, 1621, 1627, 1632, 1632, 1627, 1623 } };
+    for (int i = 0; i < DEM.size(); ++i) 
+    {
+        for (int j = 0; j < DEM[i].size(); ++j) {
+            std::cout << DEM[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    printProgress(1, 6);
+
+    ////搜索DEM中的洼地
+    //std::vector<std::vector<float>> Spill = Fill(DEM);
+    //for (int i = 0; i < Spill.size(); ++i) {
+    //    for (int j = 0; j < Spill[i].size(); ++j) {
+    //        std::cout << Spill[i][j] << " ";
+    //    }
+    //    std::cout << std::endl;
+    //}
+    //cout << "搜索洼地并填洼完成！" << endl;
+    printProgress(2, 6);
+    //利用D8算法计算DEM的单流向
+    std::vector<std::vector<int>> d8_DEM = d8_Algorithm(DEM);
+    for (int i = 0; i < d8_DEM.size(); ++i) {
+        for (int j = 0; j < d8_DEM[i].size(); ++j) {
+            std::cout << d8_DEM[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    printProgress(4, 6);
+    // 计算DEM的累积流量
+    std::vector<std::vector<int>> FlowAccu = Accumulate(d8_DEM);
+    for (int i = 0; i < FlowAccu.size(); ++i) {
+        for (int j = 0; j < FlowAccu[i].size(); ++j) {
+            std::cout << FlowAccu[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << "流量累积完成" << std::endl;
+    printProgress(5.5, 6);
+    // 提取河网
+    //std::vector<std::vector<float>> river = extract_stream(FlowAccu);
+    //写入数据
+    writetif(FlowAccu);
+    cout << "写入流量数据完成！" << endl;
+    printProgress(6, 6);
+    return;
+}
