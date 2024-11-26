@@ -27,6 +27,7 @@ It can process a 696-line, 493-column 32-bit DEM dataset on a single thread on a
 5. **Additional Materiel**
    - The `Fill.txt` file contains a small component `std::vector<vector<float>> Fill`, which implements a depression filling method using a priority queue with a time complexity of O(n).
    - Note: This method has a memory management issue and has not been merged into the final solution. But I considered it elegant and, therefore, it was finally retained (^ v ^).
+     It can solve my test samples but failed to deal with real-world DEM in the 'dataset' folder. (T T)
 ## 中文
 ### 概述
 此仓库是一个专注于高速洪水累积量计算的 *地理信息系统底层开发* 作业。使用C++20标准开发，并在Visual Studio 2022 Community X64 Debug模式下编译和运行通过。在笔记本Intel i7-13700HX 2100MHz芯片上单线程处理一个696行，
@@ -52,8 +53,7 @@ It can process a 696-line, 493-column 32-bit DEM dataset on a single thread on a
 
 5. **额外材料**
    - `Fill.txt` 文件包含了一个函数 `std::vector<vector<float>> Fill`，它使用优先队列实现了一种填洼方法，时间复杂度为O(n)。
-   - 注意：该方法存在内存管理问题于是没有在项目中部署，但我认为这种方法非常优雅，因此保留了txt版本(^ v ^)。
-
+   - 注意：该方法没有在项目中部署，但我认为这种方法非常优雅，因此保留了txt版本(^ v ^)。他可以应对我的测试样例，但是无法应对dataset中的真实世界DEM。(T T)
 ### References
 
 1. Zhou, G., Wei, H., & Fu, S. (2019). A fast and simple algorithm for calculating flow accumulation matrices from raster digital elevation. *Frontiers of Earth Science: English Edition*, 13(2), 10.
