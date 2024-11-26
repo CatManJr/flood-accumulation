@@ -16,7 +16,7 @@ It can process a 696-line, 493-column 32-bit DEM dataset on a single thread on a
    - The `presentation.pdf` document provides a detailed explanation of the algorithms and logic implemented in the code.
 
 3. **Data Sets**
-   - The `dataset` folder contains two example DEM (Digital Elevation Model) data sets, each with a scale of 1e6.
+   - The `dataset` folder contains two example DEM (Digital Elevation Model) data sets, each with a scale of 1e5.
    - The `Test result` folder contains the data results after running the solution. You could extract the streams and visualize them more beautifully using ArcGIS.
 
 4. **Software Requirements**
@@ -43,7 +43,7 @@ It can process a 696-line, 493-column 32-bit DEM dataset on a single thread on a
    - `presentation.pdf` 文档提供了代码中实现的算法和逻辑的详细说明。
 
 3. **数据集**
-   - `dataset` 文件夹包含了两个示例的DEM（数字高程模型）数据集，数据集的尺寸大约为1e6个像素。
+   - `dataset` 文件夹包含了两个示例的DEM（数字高程模型）数据集，数据集的尺寸大约为1e5级别。
    - `Test result` 文件夹包含了运行解决方案后的数据结果。你可以在ArcGIS中进一步提取流线和可视化。
 
 4. **软件要求**
